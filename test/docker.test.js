@@ -17,9 +17,11 @@ const assert = sinon.assert;
 const { setProcess } = require('./test-utils');
 const { hasDocker } = require('./conditions');
 
-const util = require('util');
 const path = require('path');
 const { sleep } = require('../lib/time');
+
+const baseDir = path.resolve('/');
+const fs = require('fs-extra');
 
 describe('test generateDockerCmd', () => {
   const functionProps = {
@@ -130,6 +132,27 @@ describe('test imageExist', async () => {
   });
 });
 
+describe('test resolveTmpDirToMount', () => {
+
+  it('test resolve tmp dir', async () => {
+
+    const mount = await docker.resolveTmpDirToMount('/tmp');
+
+    expect(mount).to.eql({
+      Type: 'bind',
+      Source: '/tmp',
+      Target: '/tmp',
+      ReadOnly: false
+    });
+  });
+
+  it('test tmp dir is empty', async () => {
+
+    const mount = await docker.resolveTmpDirToMount();
+    expect(mount).to.eql({});
+  });
+});
+
 describe('test resolveCodeUriToMount', () => {
 
   // windows will resolve /dir to c:\dir
@@ -139,7 +162,7 @@ describe('test resolveCodeUriToMount', () => {
 
   beforeEach(() => {
 
-    const lstat = sandbox.stub();
+    const lstat = sandbox.stub(fs, 'lstat');
 
     lstat.withArgs(dirPath).resolves({
       isDirectory: function () { return true; }
@@ -150,13 +173,6 @@ describe('test resolveCodeUriToMount', () => {
     });
 
     sandbox.stub(path, 'basename').returns('jar');
-
-    sandbox.stub(util, 'promisify').returns(lstat);
-
-    docker = proxyquire('../lib/docker', {
-      'util': util,
-      'path': path
-    });
   });
 
   afterEach(() => {
@@ -165,7 +181,7 @@ describe('test resolveCodeUriToMount', () => {
 
   it('test resolve code uri', async () => {
 
-    const mount = await docker.resolveCodeUriToMount(dirPath);
+    const mount = await docker.resolveCodeUriToMount(path.resolve(baseDir, dirPath));
 
     expect(mount).to.eql({
       Type: 'bind',
@@ -177,7 +193,7 @@ describe('test resolveCodeUriToMount', () => {
 
   it('test resolve jar code uri', async () => {
 
-    const mount = await docker.resolveCodeUriToMount(jarPath);
+    const mount = await docker.resolveCodeUriToMount(path.resolve(baseDir, jarPath));
 
     expect(mount).to.eql({
       Type: 'bind',
@@ -234,7 +250,7 @@ describe('test resolveNasConfigToMounts', () => {
       ]
     };
 
-    const mount = await docker.resolveNasConfigToMounts('', nasConfig, path.posix.join(projectDir, 'template.yml'));
+    const mount = await docker.resolveNasConfigToMounts('', nasConfig, projectDir);
 
     expect(mount).to.eql([{
       Type: 'bind',
@@ -272,7 +288,7 @@ describe('test resolveNasConfigToMounts', () => {
   it('test NasConfig: Auto', async () => {
     const nasConfig = 'Auto';
     
-    const mount = await docker.resolveNasConfigToMounts('serviceName', nasConfig, path.posix.join(projectDir, 'template.yml'));
+    const mount = await docker.resolveNasConfigToMounts('serviceName', nasConfig, projectDir);
 
     expect(mount).to.eql([{
       Type: 'bind',
@@ -433,7 +449,7 @@ describe('test docker run', async () => {
   });
 });
 
-describe('InstallationContainer', async () => {
+describe('Integration::InstallationContainer', async () => {
 
   beforeEach(() => {
     sandbox.stub(DockerCli.prototype, 'listImages').resolves({
@@ -451,6 +467,7 @@ describe('InstallationContainer', async () => {
 
   (hasDocker ? it : it.skip)('startInstallationContainer', async () => {
     const runner = await docker.startInstallationContainer({
+      baseDir,
       runtime: 'python2.7',
       imageName: 'bitnami/minideb:jessie',
       codeUri: tempDir
@@ -461,6 +478,7 @@ describe('InstallationContainer', async () => {
 
   (hasDocker ? it : it.skip)('exec installation container', async () => {
     const runner = await docker.startInstallationContainer({
+      baseDir,
       runtime: 'python2.7',
       imageName: 'bitnami/minideb:jessie',
       codeUri: tempDir

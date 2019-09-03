@@ -13,6 +13,7 @@
       2,
       "unix"
     ],
+    "require-atomic-updates": "off",
     "semi": [2, "always"],
     "strict": [2, "global"],
     "curly": 2,
@@ -48,7 +49,8 @@
     "no-process-exit": 2,
     "comma-spacing": 2,
     "key-spacing": 2,
-    "comma-dangle": 2
+    "comma-dangle": 2,
+    "space-infix-ops": 2
   },
   "env": {
     "es6": true,

@@ -1,5 +1,6 @@
 'use strict';
 
+const path = require('path');
 const expect = require('expect.js');
 const sinon = require('sinon');
 const sandbox = sinon.createSandbox();
@@ -15,16 +16,21 @@ const proxyquire = require('proxyquire');
 const { functionName, functionRes,
   functionProps, serviceName,
   serviceRes, serviceResWithNasConfig,
-  debugPort, debugIde, tplPath, codeMount,
+  debugPort, debugIde, codeMount,
   nasMounts } = require('./mock-data');
+
+const baseDir = '.';
+const tmpDir = path.resolve('.');
 
 describe('test invoke construct and init', async () => {
 
   beforeEach(() => {
 
+    sandbox.stub(docker, 'isDockerToolBox').resolves({});
     sandbox.stub(docker, 'resolveCodeUriToMount').resolves(codeMount);
     sandbox.stub(docker, 'pullImageIfNeed').resolves({});
-    sandbox.stub(dockerOpts, 'resolveRuntimeToDockerImage').resolves('aliyunfc/runtime-python3.6:1.5.7');
+    sandbox.stub(docker, 'resolveTmpDirToMount').resolves({});
+    sandbox.stub(dockerOpts, 'resolveRuntimeToDockerImage').resolves(`aliyunfc/runtime-python3.6:${dockerOpts.IMAGE_VERSION}`);
 
     Invoke = proxyquire('../../lib/local/invoke', {
       '../docker': docker,
@@ -44,7 +50,7 @@ describe('test invoke construct and init', async () => {
     expect(invoke.functionProps).to.eql(functionProps);
     expect(invoke.debugPort).to.eql(debugPort);
     expect(invoke.debugIde).to.eql(debugIde);
-    expect(invoke.tplPath).to.eql(tplPath);
+    expect(invoke.baseDir).to.eql(baseDir);
 
     expect(invoke.runtime).to.eql(functionProps.Runtime);
     expect(invoke.codeUri).to.eql(process.cwd());
@@ -57,7 +63,7 @@ describe('test invoke construct and init', async () => {
       functionRes,
       debugPort,
       debugIde,
-      tplPath);
+      baseDir);
 
     expectConstructConfigs(invoke);
   });
@@ -70,7 +76,9 @@ describe('test invoke construct and init', async () => {
       functionRes,
       debugPort,
       debugIde,
-      tplPath);
+      baseDir,
+      tmpDir
+    );
 
     await invoke.init();
 
@@ -78,11 +86,19 @@ describe('test invoke construct and init', async () => {
     expect(invoke.dockerUser).to.eql('10003:10003');
     expect(invoke.nasMounts).to.eql([]);
     expect(invoke.codeMount).to.eql(codeMount);
-    expect(invoke.mounts).to.eql([codeMount]);
     expect(invoke.containerName).to.contain('fun_local_');
-    expect(invoke.imageName).to.contain('aliyunfc/runtime-python3.6:1.5.7');
+    expect(invoke.imageName).to.contain(`aliyunfc/runtime-python3.6:${dockerOpts.IMAGE_VERSION}`);
+    expect(invoke.tmpDir).to.eql(tmpDir);
 
-    assert.calledWith(docker.pullImageIfNeed, 'aliyunfc/runtime-python3.6:1.5.7');
+    expect(invoke.mounts).to.eql([{
+      Type: 'bind',
+      Source: '/.',
+      Target: '/',
+      ReadOnly: false 
+    }]);
+
+    assert.calledWith(docker.pullImageIfNeed, `aliyunfc/runtime-python3.6:${dockerOpts.IMAGE_VERSION}`);
+    assert.called(docker.isDockerToolBox);
   });
 
   it('test init with nas config', async () => {
@@ -93,7 +109,9 @@ describe('test invoke construct and init', async () => {
       functionRes,
       debugPort,
       debugIde,
-      tplPath);
+      baseDir,
+      tmpDir
+    );
 
     await invoke.init();
 
@@ -110,11 +128,25 @@ describe('test invoke construct and init', async () => {
     expect(invoke.dockerUser).to.eql('10003:10003');
     expect(invoke.nasMounts).to.eql(nasMounts);
     expect(invoke.codeMount).to.eql(codeMount);
-    expect(invoke.mounts).to.eql([codeMount, ...nasMounts]);
     expect(invoke.containerName).to.contain('fun_local_');
-    expect(invoke.imageName).to.eql('aliyunfc/runtime-python3.6:1.5.7');
+    expect(invoke.imageName).to.eql(`aliyunfc/runtime-python3.6:${dockerOpts.IMAGE_VERSION}`);
+    expect(invoke.tmpDir).to.eql(tmpDir);
 
-    assert.calledWith(docker.pullImageIfNeed, 'aliyunfc/runtime-python3.6:1.5.7');
+    expect(invoke.mounts).to.eql([
+      {
+        Type: 'bind',
+        Source: '/.',
+        Target: '/',
+        ReadOnly: false
+      },
+      {
+        Type: 'bind',
+        Source: '/.fun/nas/012194b28f-ujc20.cn-hangzhou.nas.aliyuncs.com/',
+        Target: '/mnt/nas',
+        ReadOnly: false }
+    ]);
+
+    assert.calledWith(docker.pullImageIfNeed, `aliyunfc/runtime-python3.6:${dockerOpts.IMAGE_VERSION}`);
   });
 });
 
@@ -122,10 +154,13 @@ describe('test showDebugIdeTips', async () => {
 
   beforeEach(() => {
 
+    sandbox.stub(docker, 'isDockerToolBox').resolves({});
     sandbox.stub(docker, 'resolveCodeUriToMount').resolves(codeMount);
     sandbox.stub(docker, 'pullImageIfNeed').resolves({});
+    sandbox.stub(docker, 'resolveTmpDirToMount').resolves({});
 
-    sandbox.stub(docker, 'showDebugIdeTips').resolves({});
+    sandbox.stub(docker, 'showDebugIdeTipsForVscode').resolves({});
+    sandbox.stub(docker, 'showDebugIdeTipsForPycharm').resolves({});
 
     Invoke = proxyquire('../../lib/local/invoke', {
       '../docker': docker
@@ -143,11 +178,11 @@ describe('test showDebugIdeTips', async () => {
       functionRes,
       null,
       debugIde,
-      tplPath);
+      baseDir);
 
     await invoke.showDebugIdeTips();
-    
-    assert.notCalled(docker.showDebugIdeTips);
+
+    assert.notCalled(docker.showDebugIdeTipsForVscode);
   });
 
   it('test does nothing2', async () => {
@@ -157,11 +192,11 @@ describe('test showDebugIdeTips', async () => {
       functionRes,
       debugPort,
       null,
-      tplPath);
+      baseDir);
 
     await invoke.showDebugIdeTips();
-    
-    assert.notCalled(docker.showDebugIdeTips);
+
+    assert.notCalled(docker.showDebugIdeTipsForVscode);
   });
 
 
@@ -172,27 +207,27 @@ describe('test showDebugIdeTips', async () => {
       functionRes,
       null,
       null,
-      tplPath);
+      baseDir);
 
     await invoke.showDebugIdeTips();
-    
-    assert.notCalled(docker.showDebugIdeTips);
+
+    assert.notCalled(docker.showDebugIdeTipsForVscode);
   });
 
-  it('test show debug ide tips', async () => {
+  it('test show vscode debug tips', async () => {
     const invoke = new Invoke(serviceName,
       serviceResWithNasConfig,
       functionName,
       functionRes,
       debugPort,
       debugIde,
-      tplPath);
+      baseDir);
 
     await invoke.init();
     
     await invoke.showDebugIdeTips();
     
-    assert.calledWith(docker.showDebugIdeTips, 
+    assert.calledWith(docker.showDebugIdeTipsForVscode, 
       serviceName, 
       functionName,
       'python3', 
@@ -200,4 +235,21 @@ describe('test showDebugIdeTips', async () => {
       debugPort);
   });
 
+  it('test show pycharm debug tips', async () => {
+    const invoke = new Invoke(serviceName,
+      serviceResWithNasConfig,
+      functionName,
+      functionRes,
+      debugPort,
+      'pycharm',
+      baseDir);
+
+    await invoke.init();
+    
+    await invoke.showDebugIdeTips();
+    
+    assert.calledWith(docker.showDebugIdeTipsForPycharm, 
+      '.', 
+      debugPort);
+  });
 });

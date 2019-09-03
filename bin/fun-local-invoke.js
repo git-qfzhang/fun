@@ -16,17 +16,18 @@ program
   almost identically. You can pass in the event body via stdin or by using the -e (--event)
   parameter.`)
   .usage('[options] <[service/]function>')
+  .option('-t, --template [template]', 'path of fun template file.')
   .option('-d, --debug-port <port>',
     `specify the sandboxed container starting in debug mode,
                              and exposing this port on localhost`)
-  // todo: add auto option to auto config vscode
-  .option('-c, --config <ide/debugger>',
-    `output configurations for the specified ide/debugger, where
-                             the ide/debugger can currently only be vscode`)
+  .option('-c, --config <ide/debugger>', 
+    'select which IDE to use when debugging and output related debug config tips for the IDE. Options：\'vscode\', \'pycharm\'')
   .option('-e, --event <path>',
     `a file containing event data passed to the function during
                              invoke, If this option is not specified, it defaults to
                              reading event from stdin`)
+  .option('--tmp-dir <tmpDir>', `The temp directory mounted to /tmp , default to './.fun/tmp/invoke/{service}/{function}/'`)
+
   .parse(process.argv);
 
 if (program.args.length > 1) {
@@ -40,7 +41,7 @@ notifier.notify();
 getVisitor().then(visitor => {
   visitor.pageview('/fun/local/invoke').send();
 
-  require('../lib/commands/local/invoke')(program.args[0], program)
+  require('../lib/commands/local/invoke').invoke(program.args[0], program)
     .then(() => {
       visitor.event({
         ec: 'local invoke',

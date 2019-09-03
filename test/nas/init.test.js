@@ -48,14 +48,14 @@ describe('test fun nas init', () => {
     sandbox.restore();
   });
   
-  it('function deployNasService', async () => {
+  it('function deployNasService without service', async () => {
     
     const serviceName = 'fun-nas-test';
     const nasServiceName = constants.FUN_NAS_SERVICE_PREFIX + serviceName;
     const nasFunctionName = constants.FUN_NAS_FUNCTION;
     
     fs.pathExists.returns(true);
-    const zipCodePath = path.resolve(__dirname, '../../lib/fc-utils/fc-fun-nas-server/dist/fun-nas-server.zip');
+    const zipCodePath = path.resolve(__dirname, '../../lib/utils/fun-nas-server/dist/fun-nas-server.zip');
     
     const nasServiceRes = {
       'Type': 'Aliyun::Serverless::Service',
@@ -71,7 +71,7 @@ describe('test fun nas init', () => {
           Runtime: 'nodejs10',
           CodeUri: zipCodePath,
           Timeout: 600,
-          MemorySize: 512,
+          MemorySize: 256,
           EnvironmentVariables: {
             PATH: '/code/.fun/root/usr/bin'
           }

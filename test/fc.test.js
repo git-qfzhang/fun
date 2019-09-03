@@ -13,6 +13,8 @@ const path = require('path');
 const fs = require('fs-extra');
 const expect = require('expect.js');
 
+const { green } = require('colors');
+
 describe('test getFunCodeAsBase64', () => {
 
   let restoreProcess;
@@ -41,42 +43,41 @@ describe('test getFunCodeAsBase64', () => {
 
   it('test getFunCodeAsBase64: codeUri outside baseDir', async () => {
     await fc.getFunCodeAsBase64('/a/b', '/a');
-    assert.calledWith(fs.lstat, '/a');
-    assert.calledWith(zip.pack, '/a', null);
+    assert.calledWith(fs.lstat, path.resolve('/a'));
+    assert.calledWith(zip.pack, path.resolve('/a'), null);
   });
 
 
   it('test getFunCodeAsBase64: codeUri outside baseDir2', async () => {
     await fc.getFunCodeAsBase64('/a/b', '../');
-    assert.calledWith(fs.lstat, '../');
-    assert.calledWith(zip.pack, '../', null);
+    assert.calledWith(fs.lstat, path.resolve('/a'));
+    assert.calledWith(zip.pack, path.resolve('/a'), null);
   });
 
   it('test getFunCodeAsBase64: codeUri within baseDir', async () => {
     await fc.getFunCodeAsBase64('/a/b', '/a/b/c');
-    assert.calledWith(fs.lstat, '/a/b/c');
-    assert.calledWith(zip.pack, '/a/b/c', sinon.match.func);
+    assert.calledWith(fs.lstat, path.resolve('/a/b/c'));
+    assert.calledWith(zip.pack, path.resolve('/a/b/c'), sinon.match.func);
   });
 
 
   it('test getFunCodeAsBase64: absolute codeUri path', async () => {
-    await fc.getFunCodeAsBase64('/a/b', process.cwd() + '/a/b/c/index.js');
-    assert.calledWith(fs.lstat, process.cwd() + '/a/b/c/index.js');
-    assert.calledWith(zip.pack, process.cwd() + '/a/b/c/index.js', null);
+    await fc.getFunCodeAsBase64('/a/b', '/a/b/c/index.js');
+    assert.calledWith(fs.lstat, path.resolve('/a/b/c/index.js'));
+    assert.calledWith(zip.pack, path.resolve('/a/b/c/index.js'), sinon.match.func);
   });
 
   it('test getFunCodeAsBase64: relative codeUri path', async () => {
     await fc.getFunCodeAsBase64('/a/b', './index.js');
-    assert.calledWith(fs.lstat, './index.js');
-    assert.calledWith(zip.pack, './index.js', null);
+    assert.calledWith(fs.lstat, path.resolve('/a/b/index.js'));
+    assert.calledWith(zip.pack, path.resolve('/a/b/index.js'), sinon.match.func);
   });
 
   it('test getFunCodeAsBase64: relative codeUri for war', async () => {
     const content = await fc.getFunCodeAsBase64('/a/b', './web.war');
     expect(content).to.eql({ base64: Buffer.from('test').toString('base64') });
 
-    assert.calledWith(fs.readFile, './web.war');
-
+    assert.calledWith(fs.readFile, path.resolve('/a/b/web.war'));
   });
 });
 
@@ -87,6 +88,8 @@ describe('Incorrect environmental variables', () => {
     sandbox.stub(FC.prototype, 'getFunction').resolves({});
     sandbox.stub(FC.prototype, 'updateFunction').resolves({});
     sandbox.stub(zip, 'pack').resolves({});
+
+    sandbox.stub(console, 'log');
 
     fc = await proxyquire('../lib/fc', {
       './package/zip': zip,
@@ -117,7 +120,7 @@ describe('Incorrect environmental variables', () => {
       initializationTimeout: 3,
       memorySize: 128,
       runtime: 'nodejs6',
-      codeUri: path.join('examples', 'local', 'nodejs6'),
+      codeUri: 'nodejs6',
       environmentVariables: { 'StringTypeValue1': 123, 'StringTypeValue2': 'test' }
     });
 
@@ -144,5 +147,100 @@ describe('Incorrect environmental variables', () => {
           PYTHONUSERBASE: '/code/.fun/python'
         }
       });
+  });
+
+  it('invoke function sync', async () => {
+
+    sandbox.stub(FC.prototype, 'invokeFunction').returns({
+      'headers': {
+        'access-control-expose-headers': 'Date,x-fc-request-id,x-fc-error-type,x-fc-code-checksum,x-fc-invocation-duration,x-fc-max-memory-usage,x-fc-log-result,x-fc-invocation-code-version',
+        'content-length': '6',
+        'content-type': 'application/octet-stream',
+        'x-fc-code-checksum': '17380263816131011825',
+        'x-fc-invocation-duration': '18',
+        'x-fc-invocation-service-version': 'LATEST',
+        'x-fc-log-result': 'RkMgSW52b2tlIFN0YXJ0IFJlcXVlc3RJZDogYWMyOTI2NGQtMDkwMC00ZjNkLWEwOWEtYmMzZGQyMmIyMzI1DQpsb2FkIGNvZGUgZm9yIGhhbmRsZXI6aW5kZXguaGFuZGxlcg0KRkMgSW52b2tlIEVuZCBSZXF1ZXN0SWQ6IGFjMjkyNjRkLTA5MDAtNGYzZC1hMDlhLWJjM2RkMjJiMjMyNQ0KCkR1cmF0aW9uOiAxNy40NSBtcywgQmlsbGVkIER1cmF0aW9uOiAxMDAgbXMsIE1lbW9yeSBTaXplOiAxMjggTUIsIE1heCBNZW1vcnkgVXNlZDogMzAuOTkgTUI=',
+        'x-fc-max-memory-usage': '30.99',
+        'x-fc-request-id': 'ac29264d-0900-4f3d-a09a-bc3dd22b2325',
+        'date': 'Wed, 21 Aug 2019 03:09:03 GMT'
+      },
+      'data': '[\'OK\']'
+    });
+    const rs = await fc.invokeFunction({
+      serviceName: 'serviceName', 
+      functionName: 'functionName', 
+      event: 'event', 
+      invocationType: 'Sync'
+    });
+
+    assert.calledWith(FC.prototype.invokeFunction, 'serviceName', 'functionName', 'event', {
+      'X-Fc-Log-Type': 'Tail',
+      'X-Fc-Invocation-Type': 'Sync'
+    });
+
+    assert.callCount(console.log, 5);
+
+    expect(rs).to.eql({
+      'headers': {
+        'access-control-expose-headers': 'Date,x-fc-request-id,x-fc-error-type,x-fc-code-checksum,x-fc-invocation-duration,x-fc-max-memory-usage,x-fc-log-result,x-fc-invocation-code-version',
+        'content-length': '6',
+        'content-type': 'application/octet-stream',
+        'x-fc-code-checksum': '17380263816131011825',
+        'x-fc-invocation-duration': '18',
+        'x-fc-invocation-service-version': 'LATEST',
+        'x-fc-log-result': 'RkMgSW52b2tlIFN0YXJ0IFJlcXVlc3RJZDogYWMyOTI2NGQtMDkwMC00ZjNkLWEwOWEtYmMzZGQyMmIyMzI1DQpsb2FkIGNvZGUgZm9yIGhhbmRsZXI6aW5kZXguaGFuZGxlcg0KRkMgSW52b2tlIEVuZCBSZXF1ZXN0SWQ6IGFjMjkyNjRkLTA5MDAtNGYzZC1hMDlhLWJjM2RkMjJiMjMyNQ0KCkR1cmF0aW9uOiAxNy40NSBtcywgQmlsbGVkIER1cmF0aW9uOiAxMDAgbXMsIE1lbW9yeSBTaXplOiAxMjggTUIsIE1heCBNZW1vcnkgVXNlZDogMzAuOTkgTUI=',
+        'x-fc-max-memory-usage': '30.99',
+        'x-fc-request-id': 'ac29264d-0900-4f3d-a09a-bc3dd22b2325',
+        'date': 'Wed, 21 Aug 2019 03:09:03 GMT'
+      },
+      'data': '[\'OK\']'
+    });
+  });
+
+  it('invoke function async', async () => {
+
+    sandbox.stub(FC.prototype, 'invokeFunction').returns({
+      'headers': {
+        'access-control-expose-headers': 'Date,x-fc-request-id,x-fc-error-type,x-fc-code-checksum,x-fc-invocation-duration,x-fc-max-memory-usage,x-fc-log-result,x-fc-invocation-code-version',
+        'content-length': '6',
+        'content-type': 'application/octet-stream',
+        'x-fc-code-checksum': '17380263816131011825',
+        'x-fc-invocation-duration': '18',
+        'x-fc-invocation-service-version': 'LATEST',
+        'x-fc-log-result': 'RkMgSW52b2tlIFN0YXJ0IFJlcXVlc3RJZDogYWMyOTI2NGQtMDkwMC00ZjNkLWEwOWEtYmMzZGQyMmIyMzI1DQpsb2FkIGNvZGUgZm9yIGhhbmRsZXI6aW5kZXguaGFuZGxlcg0KRkMgSW52b2tlIEVuZCBSZXF1ZXN0SWQ6IGFjMjkyNjRkLTA5MDAtNGYzZC1hMDlhLWJjM2RkMjJiMjMyNQ0KCkR1cmF0aW9uOiAxNy40NSBtcywgQmlsbGVkIER1cmF0aW9uOiAxMDAgbXMsIE1lbW9yeSBTaXplOiAxMjggTUIsIE1heCBNZW1vcnkgVXNlZDogMzAuOTkgTUI=',
+        'x-fc-max-memory-usage': '30.99',
+        'x-fc-request-id': 'ac29264d-0900-4f3d-a09a-bc3dd22b2325',
+        'date': 'Wed, 21 Aug 2019 03:09:03 GMT'
+      },
+      'data': '[\'OK\']'
+    });
+    const rs = await fc.invokeFunction({
+      serviceName: 'serviceName', 
+      functionName: 'functionName', 
+      event: 'event', 
+      invocationType: 'Async'
+    });
+
+    assert.calledWith(FC.prototype.invokeFunction, 'serviceName', 'functionName', 'event', {
+      'X-Fc-Invocation-Type': 'Async'
+    });
+
+    assert.calledWith(console.log, green('✔ ') + 'serviceName/functionName async invoke success.');
+
+    expect(rs).to.eql({
+      'headers': {
+        'access-control-expose-headers': 'Date,x-fc-request-id,x-fc-error-type,x-fc-code-checksum,x-fc-invocation-duration,x-fc-max-memory-usage,x-fc-log-result,x-fc-invocation-code-version',
+        'content-length': '6',
+        'content-type': 'application/octet-stream',
+        'x-fc-code-checksum': '17380263816131011825',
+        'x-fc-invocation-duration': '18',
+        'x-fc-invocation-service-version': 'LATEST',
+        'x-fc-log-result': 'RkMgSW52b2tlIFN0YXJ0IFJlcXVlc3RJZDogYWMyOTI2NGQtMDkwMC00ZjNkLWEwOWEtYmMzZGQyMmIyMzI1DQpsb2FkIGNvZGUgZm9yIGhhbmRsZXI6aW5kZXguaGFuZGxlcg0KRkMgSW52b2tlIEVuZCBSZXF1ZXN0SWQ6IGFjMjkyNjRkLTA5MDAtNGYzZC1hMDlhLWJjM2RkMjJiMjMyNQ0KCkR1cmF0aW9uOiAxNy40NSBtcywgQmlsbGVkIER1cmF0aW9uOiAxMDAgbXMsIE1lbW9yeSBTaXplOiAxMjggTUIsIE1heCBNZW1vcnkgVXNlZDogMzAuOTkgTUI=',
+        'x-fc-max-memory-usage': '30.99',
+        'x-fc-request-id': 'ac29264d-0900-4f3d-a09a-bc3dd22b2325',
+        'date': 'Wed, 21 Aug 2019 03:09:03 GMT'
+      },
+      'data': '[\'OK\']'
+    });
   });
 });
